@@ -6,14 +6,70 @@ from shapely import Polygon
 from shapely.validation import make_valid
 
 
-def download_graph(place: str, logger=None):
+def download_cs_graph(place: str, logger: str = None) -> nx.MultiDiGraph:
+    """Download the citystrides graph for the given location.
+
+    Args:
+        place (str): The name of the city/location to download the graph for.
+        logger (str, optional): The name of the logger to use. Defaults to None.
+
+    Returns:
+        nx.MultiDiGraph: The downloaded citystrides graph.
+    """
     logger = logging.getLogger(logger)
     logger.info(f"Downloading graph for {place}...")
 
     # can go either way on walking and biking paths
     ox.settings.bidirectional_network_types = ["walk", "bike"]
 
-    # handle our special trial case
+    # get our list of filters
+    with open("csquery.txt", encoding="utf-8") as file:
+        queries = file.readlines()
+
+    # separate into filter strings
+    queries = [line.strip() for line in queries]
+    queries = "".join(queries)
+    queries = queries.split(";")[:-1]  # last string will be empty
+
+    G = nx.MultiDiGraph()
+    for filter in queries:
+        logger.info(f"Using filter: {filter}")
+
+        # download the graph for this filter
+        try:
+            if place == "Sunshine Hills":
+                H = download_polygon_graph(place, filter)
+            else:
+                H = ox.graph_from_place(
+                    place,
+                    retain_all=True,
+                    truncate_by_edge=True,
+                    custom_filter=filter,
+                    simplify=False,
+                )
+        except ox._errors.InsufficientResponseError:
+            logger.warning(f"Could not download data for filter: {filter}")
+            continue
+
+        # compose with existing graph
+        G = nx.compose(G, H)
+    logger.info(f"Downloaded graph with {len(G.nodes)} nodes and {len(G.edges)} edges.")
+    return G
+
+
+def download_polygon_graph(place: str, filter: str) -> nx.MultiDiGraph:
+    """Download a citystrides graph using a hardcoded polygon.
+
+    Args:
+        place (str): The location to download the graph for. Valid values are: "Sunshine Hills".
+        filter (str): The custom filter to use for downloading the graph.
+
+    Raises:
+        ValueError: If an invalid location is passed.
+
+    Returns:
+        nx.MultiDiGraph: The downloaded citystrides graph.
+    """
     if place == "Sunshine Hills":
         polygon = Polygon(
             (
@@ -41,42 +97,13 @@ def download_graph(place: str, logger=None):
                 (-122.9209377, 49.1276241),
             )
         )
+    else:
+        raise ValueError(f"Polygon graph download not supported for {place}.")
 
-    # get our list of filters
-    with open("csquery.txt", encoding="utf-8") as file:
-        queries = file.readlines()
-
-    # separate into filter strings
-    queries = [line.strip() for line in queries]
-    queries = "".join(queries)
-    queries = queries.split(";")[:-1]  # last string will be empty
-
-    G = nx.MultiDiGraph()
-    for filter in queries:
-        logger.info(f"Using filter: {filter}")
-
-        # download the graph for this filter
-        try:
-            if place == "Sunshine Hills":
-                H = ox.graph.graph_from_polygon(
-                    make_valid(polygon),
-                    retain_all=True,
-                    truncate_by_edge=True,
-                    custom_filter=filter,
-                    simplify=False,
-                )
-            else:
-                H = ox.graph_from_place(
-                    place,
-                    retain_all=True,
-                    truncate_by_edge=True,
-                    custom_filter=filter,
-                    simplify=False,
-                )
-        except ox._errors.InsufficientResponseError:
-            logger.warning(f"Could not download data for filter: {filter}")
-            continue
-
-        # compose with existing graph
-        G = nx.compose(G, H)
-    logger.info(f"Downloaded graph with {len(G.nodes)} nodes and {len(G.edges)} edges.")
+    return ox.graph.graph_from_polygon(
+        make_valid(polygon),
+        retain_all=True,
+        truncate_by_edge=True,
+        custom_filter=filter,
+        simplify=False,
+    )
