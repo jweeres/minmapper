@@ -1,0 +1,8 @@
+name: minmapper
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.13
+  - jupyter
+  - osmnx
