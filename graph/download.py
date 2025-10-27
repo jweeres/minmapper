@@ -3,7 +3,8 @@ import logging
 import geopandas as gpd
 import networkx as nx
 import osmnx as ox
-from shapely import Polygon
+from shapely import Polygon, union_all
+from shapely.plotting import plot_polygon
 from shapely.validation import make_valid
 
 
@@ -24,19 +25,10 @@ def download_cs_graph(place: str, logger: str = None) -> tuple[nx.MultiDiGraph, 
     # can go either way on walking and biking paths
     ox.settings.bidirectional_network_types = ["walk", "bike"]
 
-    # get our list of filters
-    with open("csquery.txt", encoding="utf-8") as file:
-        queries = file.readlines()
-
-    # separate into filter strings
-    queries = [line.strip() for line in queries]
-    queries = "".join(queries)
-    queries = queries.split(";")[:-1]  # last string will be empty
-
     G = nx.MultiDiGraph()
     gdf = gpd.GeoDataFrame()
 
-    for filter in queries:
+    for filter in get_filters():
         logger.info(f"Using filter: {filter}")
 
         # download the graph for this filter
@@ -57,6 +49,7 @@ def download_cs_graph(place: str, logger: str = None) -> tuple[nx.MultiDiGraph, 
 
                 if gdf.empty:
                     gdf = ox.geocode_to_gdf(place)
+            logger.info(f"Downloaded subgraph with {len(H.nodes)} nodes and {len(H.edges)} edges.")
         except ox._errors.InsufficientResponseError:
             logger.warning(f"Could not download data for filter: {filter}")
             continue
@@ -96,7 +89,7 @@ def download_polygon_graph(
                 (-122.8936911, 49.1340445),
                 (-122.8936357, 49.1303340),
                 (-122.8903685, 49.1303445),
-                (-122.8903550, 49.1340870),
+                (-122.8904716, 49.1192825),
                 (-122.8977329, 49.1194226),
                 (-122.9002307, 49.1190351),
                 (-122.9042114, 49.1190365),
@@ -131,9 +124,94 @@ def download_polygon_graph(
             "bbox_south": [G.nodes[min(G.nodes, key=lambda node: G.nodes[node]["y"])]["y"]],
             "bbox_east": [G.nodes[max(G.nodes, key=lambda node: G.nodes[node]["x"])]["x"]],
             "bbox_north": [G.nodes[max(G.nodes, key=lambda node: G.nodes[node]["y"])]["y"]],
+            "name": [place],
         }
         gdf = gpd.GeoDataFrame(gdf, crs="EPSG:4326")
 
         return G, gdf
 
     return G, None
+
+
+def download_walk_graph(gdf: gpd.GeoDataFrame, logger: str = None) -> tuple[nx.MultiDiGraph, gpd.GeoDataFrame]:
+    """Download the graph of all valid walking paths within 1 km of city.
+
+    Args:
+        gdf (gpd.GeoDataFrame): The gdf of the city area.
+        logger (str, optional): The name of the logger to use. Defaults to None.
+
+    Returns:
+        nx.MultiDiGraph: The downloaded citystrides graph.
+        gpd.GeoDataFrame | None: The gdf of the polygon used, if requested.
+    """
+    logger = logging.getLogger(logger)
+    logger.info(f"Downloading walking graph for {gdf.name.iloc[0]}...")
+
+    # can go either way on walking and biking paths
+    ox.settings.bidirectional_network_types = ["walk", "bike"]
+
+    # get the list of polygons from the gdf
+    try:
+        geoms = gdf.geometry.iloc[0].geoms
+    except AttributeError:
+        geoms = [gdf.geometry.iloc[0]]
+
+    # buffer each polygon by 1km
+    geoms = [ox.utils_geo.buffer_geometry(geom, 1000) for geom in geoms]
+
+    # join polygons together
+    polygon = union_all(geoms)
+
+    G = nx.MultiDiGraph()
+    for filter in get_filters("walk"):
+        logger.info(f"Using filter: {filter}")
+
+        # download the graph for this filter
+        try:
+            H = ox.graph.graph_from_polygon(
+                make_valid(polygon),
+                retain_all=True,
+                truncate_by_edge=True,
+                custom_filter=filter,
+                simplify=False,
+            )
+            logger.info(f"Downloaded subgraph with {len(H.nodes)} nodes and {len(H.edges)} edges.")
+        except ValueError:
+            logger.warning(f"Could not download data for filter: {filter}")
+            continue
+
+        # compose with existing graph
+        G = nx.compose(G, H)
+
+    # create gdf from polygon
+    gdf = {
+        "geometry": [polygon],
+        "bbox_west": [G.nodes[min(G.nodes, key=lambda node: G.nodes[node]["x"])]["x"]],
+        "bbox_south": [G.nodes[min(G.nodes, key=lambda node: G.nodes[node]["y"])]["y"]],
+        "bbox_east": [G.nodes[max(G.nodes, key=lambda node: G.nodes[node]["x"])]["x"]],
+        "bbox_north": [G.nodes[max(G.nodes, key=lambda node: G.nodes[node]["y"])]["y"]],
+        "name": [f"{gdf.name.iloc[0]} (Walking)"],
+    }
+    gdf = gpd.GeoDataFrame(gdf, crs="EPSG:4326")
+
+    logger.info(f"Downloaded graph with {len(G.nodes)} nodes and {len(G.edges)} edges.")
+    return G, gdf
+
+
+def get_filters(query_type: str = "cs") -> list[str]:
+    """Get the list of custom filters for downloading citystrides graphs.
+    Args:
+        query_type (str, optional): The type of query to get filters for. Valid options are "cs" and "walk". Defaults to "cs".
+    Returns:
+        list[str]: The list of custom filters.
+    """
+    # get our list of filters
+    with open(f"{query_type}query.txt", encoding="utf-8") as file:
+        queries = file.readlines()
+
+    # separate into filter strings
+    queries = [line.strip() for line in queries]
+    queries = "".join(queries)
+    queries = queries.split(";")[:-1]  # last string will be empty
+
+    return queries
