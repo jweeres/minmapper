@@ -1,12 +1,13 @@
 import logging
 
+import geopandas as gpd
 import networkx as nx
 import osmnx as ox
 from shapely import Polygon
 from shapely.validation import make_valid
 
 
-def download_cs_graph(place: str, logger: str = None) -> nx.MultiDiGraph:
+def download_cs_graph(place: str, logger: str = None) -> tuple[nx.MultiDiGraph, gpd.GeoDataFrame]:
     """Download the citystrides graph for the given location.
 
     Args:
@@ -15,6 +16,7 @@ def download_cs_graph(place: str, logger: str = None) -> nx.MultiDiGraph:
 
     Returns:
         nx.MultiDiGraph: The downloaded citystrides graph.
+        gpd.GeoDataFrame: The geodataframe of the location boundary.
     """
     logger = logging.getLogger(logger)
     logger.info(f"Downloading graph for {place}...")
@@ -32,13 +34,18 @@ def download_cs_graph(place: str, logger: str = None) -> nx.MultiDiGraph:
     queries = queries.split(";")[:-1]  # last string will be empty
 
     G = nx.MultiDiGraph()
+    gdf = gpd.GeoDataFrame()
+
     for filter in queries:
         logger.info(f"Using filter: {filter}")
 
         # download the graph for this filter
         try:
             if place == "Sunshine Hills":
-                H = download_polygon_graph(place, filter)
+                if gdf.empty:
+                    H, gdf = download_polygon_graph(place, filter, True)
+                else:
+                    H, _ = download_polygon_graph(place, filter)
             else:
                 H = ox.graph_from_place(
                     place,
@@ -47,28 +54,36 @@ def download_cs_graph(place: str, logger: str = None) -> nx.MultiDiGraph:
                     custom_filter=filter,
                     simplify=False,
                 )
+
+                if gdf.empty:
+                    gdf = ox.geocode_to_gdf(place)
         except ox._errors.InsufficientResponseError:
             logger.warning(f"Could not download data for filter: {filter}")
             continue
 
         # compose with existing graph
         G = nx.compose(G, H)
+
     logger.info(f"Downloaded graph with {len(G.nodes)} nodes and {len(G.edges)} edges.")
-    return G
+    return G, gdf
 
 
-def download_polygon_graph(place: str, filter: str) -> nx.MultiDiGraph:
-    """Download a citystrides graph using a hardcoded polygon.
+def download_polygon_graph(
+    place: str, filter: str, get_gdf: bool = False
+) -> tuple[nx.MultiDiGraph, gpd.GeoDataFrame | None]:
+    """Download a citystrides graph, and optionally its gdf, using a hardcoded polygon.
 
     Args:
         place (str): The location to download the graph for. Valid values are: "Sunshine Hills".
         filter (str): The custom filter to use for downloading the graph.
+        get_gdf (bool, optional): Whether to return the gdf of the polygon used. Defaults to False.
 
     Raises:
         ValueError: If an invalid location is passed.
 
     Returns:
         nx.MultiDiGraph: The downloaded citystrides graph.
+        gpd.GeoDataFrame | None: The gdf of the polygon used, if requested.
     """
     if place == "Sunshine Hills":
         polygon = Polygon(
@@ -100,10 +115,25 @@ def download_polygon_graph(place: str, filter: str) -> nx.MultiDiGraph:
     else:
         raise ValueError(f"Polygon graph download not supported for {place}.")
 
-    return ox.graph.graph_from_polygon(
+    G = ox.graph.graph_from_polygon(
         make_valid(polygon),
         retain_all=True,
         truncate_by_edge=True,
         custom_filter=filter,
         simplify=False,
     )
+
+    if get_gdf:
+        # create gdf from polygon
+        gdf = {
+            "geometry": [polygon],
+            "bbox_west": [G.nodes[min(G.nodes, key=lambda node: G.nodes[node]["x"])]["x"]],
+            "bbox_south": [G.nodes[min(G.nodes, key=lambda node: G.nodes[node]["y"])]["y"]],
+            "bbox_east": [G.nodes[max(G.nodes, key=lambda node: G.nodes[node]["x"])]["x"]],
+            "bbox_north": [G.nodes[max(G.nodes, key=lambda node: G.nodes[node]["y"])]["y"]],
+        }
+        gdf = gpd.GeoDataFrame(gdf, crs="EPSG:4326")
+
+        return G, gdf
+
+    return G, None
