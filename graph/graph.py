@@ -2,6 +2,7 @@ import pickle
 from collections.abc import Iterator
 
 import geopandas as gpd
+import networkx as nx
 import numpy as np
 import pandas as pd
 from shapely import LineString
@@ -46,3 +47,33 @@ def in_bbox(lat: pd.Series, lng: pd.Series, gdf_row: pd.Series) -> bool:
         lat.between(gdf_row["bbox_south"], gdf_row["bbox_north"]).any()
         and lng.between(gdf_row["bbox_west"], gdf_row["bbox_east"]).any()
     )
+
+
+def to_digraph(G: nx.MultiDiGraph, priority: nx.MultiDiGraph = None) -> nx.DiGraph:
+    # make a copy to not mutate original graph object caller passed in
+    G = G.copy()
+    to_remove: list[tuple[int, int, int]] = []
+
+    # identify all the parallel edges in the MultiDiGraph
+    parallels = ((u, v) for u, v in G.edges(keys=False) if G.number_of_edges(u, v) > 1)
+
+    # among all sets of parallel edges, remove all except the one with the min length
+    for u, v in set(parallels):
+        priority_ids = []
+        if priority and u in priority and v in priority and priority.number_of_edges(u, v) > 0:
+            priority_ids = [data["osmid"] for _, _, data in priority.get_edge_data(u, v).items()]
+        k_min, _ = min(
+            G.get_edge_data(u, v).items(),
+            key=lambda x: x[1]["length"] if x[1]["osmid"] in priority_ids or not priority_ids else float("inf"),
+        )
+        to_remove.extend((u, v, k) for k in G[u][v] if k != k_min)
+
+    G.remove_edges_from(to_remove)
+    print([G.edges(edge[0], data=True) for edge in parallels])
+    print(to_remove)
+
+    return nx.DiGraph(G)
+
+
+# def add_visited_counts(G: nx.MultiDiGraph, gdf: gpd.GeoDataFrame, route_file: str) -> nx.MultiDiGraph:
+#     for route in get_routes_in_area(gdf, route_file):
