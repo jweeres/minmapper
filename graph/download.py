@@ -168,6 +168,7 @@ def download_walk_graph(gdf: gpd.GeoDataFrame, logger: str = None) -> tuple[nx.M
 
         # download the graph for this filter
         try:
+            # using a relaxed cs filter
             H = ox.graph.graph_from_polygon(
                 make_valid(polygon),
                 retain_all=True,
@@ -175,7 +176,21 @@ def download_walk_graph(gdf: gpd.GeoDataFrame, logger: str = None) -> tuple[nx.M
                 custom_filter=filter,
                 simplify=False,
             )
-            logger.info(f"Downloaded subgraph with {len(H.nodes)} nodes and {len(H.edges)} edges.")
+            logger.info(f"Downloaded roadway subgraph with {len(H.nodes)} nodes and {len(H.edges)} edges.")
+
+            # using osmnx's default walk filter
+            H2 = ox.graph.graph_from_polygon(
+                make_valid(polygon),
+                network_type="walk",
+                retain_all=True,
+                truncate_by_edge=True,
+                simplify=False,
+            )
+            logger.info(f"Downloaded walking subgraph with {len(H2.nodes)} nodes and {len(H2.edges)} edges.")
+
+            # combine both graphs
+            H = nx.compose(H, H2)
+            logger.info(f"Combined subgraph has {len(H.nodes)} nodes and {len(H.edges)} edges.")
         except ValueError:
             logger.warning(f"Could not download data for filter: {filter}")
             continue
