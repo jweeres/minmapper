@@ -3,6 +3,7 @@ import pickle
 from pathlib import Path
 
 import gpxpy
+import numpy as np
 import pandas as pd
 
 from garmin_fit_sdk import Decoder, Stream
@@ -75,7 +76,7 @@ def get_fit_df(filename: str) -> pd.DataFrame | None:
     decoder = Decoder(Stream.from_file(filename))
     messages, _ = decoder.read(convert_datetimes_to_dates=True)
 
-    if not messages:
+    if not messages or "record_mesgs" not in messages:
         return
 
     record = messages["record_mesgs"]
