@@ -54,7 +54,7 @@ def create_routes(instance_name: str, logger: str = None):
         if df["position_lat"].max() > 90:
             df = df / INT_DEGREES
 
-        routes.append(df)
+        routes.append(df.dropna())
 
     # save routes to file
     with open(f"routes_{instance_name}.pkl", "wb") as file:
