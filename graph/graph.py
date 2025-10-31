@@ -10,7 +10,7 @@ from shapely import LineString, Polygon
 from sklearn.neighbors import BallTree
 
 
-def get_routes_in_area(gdf: gpd.GeoDataFrame, route_file: str) -> Iterator[pd.DataFrame]:
+def get_routes_in_area(gdf: gpd.GeoDataFrame, route_file: str) -> Iterator[gpd.GeoDataFrame]:
     """Get an iterator of all routes that are at least partially within the area of interest.
 
     Args:
@@ -18,37 +18,18 @@ def get_routes_in_area(gdf: gpd.GeoDataFrame, route_file: str) -> Iterator[pd.Da
         route_file (str): The filenmae of the route pickle file.
 
     Yields:
-        Iterator[pd.DataFrame]: An iterator that yields valid routes.
+        Iterator[gpd.GeoDataFrame]: An iterator that yields valid routes.
     """
     with open(route_file, "rb") as file:
-        routes: list[pd.DataFrame] = pickle.load(file)
+        routes: list[gpd.GeoDataFrame] = pickle.load(file)
 
-    for i, route in enumerate(routes):
-        # quick check: if not in bounding box, skip
-        if not in_bbox(route["position_lat"], route["position_long"], gdf.iloc[0]):
-            continue
+    for route in routes:
+        # project route to gdf crs
+        route = ox.projection.project_gdf(route, to_crs=gdf.crs)
 
-        # check if route intersects geometry of area
-        route_line = LineString(zip(route["position_long"], route["position_lat"]))
-        if gdf.geometry.iloc[0].intersects(route_line):
+        # yield routes that intersect the area of interest
+        if gdf.sindex.query(route.geometry, predicate="intersects", output_format="dense").any():
             yield route
-
-
-def in_bbox(lat: pd.Series, lng: pd.Series, gdf_row: pd.Series) -> bool:
-    """Returns True if any of the lat-lng pairs are within the bbox bounds of the gdf row.
-
-    Args:
-        lat (pd.Series): A Series of latitude points.
-        lng (pd.Series): A Series of longitude points.
-        gdf_row (pd.Series): A gdf row - must contain `bbox_north`, `bbox_south`, `bbox_east`, and `bbox_west` columns.
-
-    Returns:
-        bool: True if any of the lat-lng pairs are within the bbox bounds, False otherwise.
-    """
-    return (
-        lat.between(gdf_row["bbox_south"], gdf_row["bbox_north"]).any()
-        and lng.between(gdf_row["bbox_west"], gdf_row["bbox_east"]).any()
-    )
 
 
 def to_digraph(G: nx.MultiDiGraph, priority: nx.MultiDiGraph = None) -> nx.DiGraph:

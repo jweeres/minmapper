@@ -4,7 +4,6 @@ import geopandas as gpd
 import networkx as nx
 import osmnx as ox
 from shapely import Polygon, union_all
-from shapely.plotting import plot_polygon
 from shapely.validation import make_valid
 
 

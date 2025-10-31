@@ -2,8 +2,8 @@ import logging
 import pickle
 from pathlib import Path
 
+import geopandas as gpd
 import gpxpy
-import numpy as np
 import pandas as pd
 
 from garmin_fit_sdk import Decoder, Stream
@@ -51,10 +51,15 @@ def create_routes(instance_name: str, logger: str = None):
             continue
 
         # correct lat/long values if stored as ints
-        if df["position_lat"].max() > 90:
+        if df["y"].max() > 90:
             df = df / INT_DEGREES
 
-        routes.append(df.dropna())
+        # drop any rows with missing data and convert timestamp to column
+        df = df.dropna().reset_index()
+
+        # create geodataframe and append to route list
+        df = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df["x"], df["y"]), crs="EPSG:4326")
+        routes.append(df)
 
     # save routes to file
     with open(f"routes_{instance_name}.pkl", "wb") as file:
@@ -87,7 +92,9 @@ def get_fit_df(filename: str) -> pd.DataFrame | None:
 
     # create dataframe
     df = pd.DataFrame(record)
-    df = df.set_index("timestamp")[["position_lat", "position_long"]]
+    df = df.set_index("timestamp")[["position_lat", "position_long"]].rename(
+        columns={"position_lat": "y", "position_long": "x"}
+    )
 
     return df
 
@@ -112,8 +119,8 @@ def get_gpx_df(filename: str) -> pd.DataFrame:
             points.append(
                 {
                     "timestamp": point.time,
-                    "position_lat": point.latitude,
-                    "position_long": point.longitude,
+                    "y": point.latitude,
+                    "x": point.longitude,
                 }
             )
 

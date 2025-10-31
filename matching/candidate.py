@@ -2,30 +2,31 @@ from typing import NamedTuple
 
 import geopandas as gpd
 import numpy as np
-import osmnx as ox
 import pandas as pd
-from shapely import Polygon
+from shapely import Point, Polygon
 
 
 class Candidate(NamedTuple):
     node_id: str
     edge_osmid: str
-    obs: tuple
+    obs: Point
     great_dist: float
-    coord: tuple
+    coord: Point
 
 
-def get_candidate_idxs(gdf: gpd.GeoDataFrame, boundary: Polygon, route: pd.DataFrame, radius: float) -> pd.DataFrame:
+def get_candidate_idxs(
+    gdf: gpd.GeoDataFrame, boundary: Polygon, route: gpd.GeoDataFrame, radius: float
+) -> pd.DataFrame:
     """Get dataframe of all candidate indices for each route point index.
 
     Args:
         gdf (gpd.GeoDataFrame): The gdf containing candidate points.
         boundary (Polygon): The boundary polygon of the area of interest.
-        route (pd.DataFrame): A dataframe containing "position_lat" and "position_long" columns.
+        route (gpd.GeoDataFrame): A GeoDataFrame containing the route points.
         radius (float): The maximum distance between a route point and a potential candidate.
 
     Raises:
-        ValueError: If the gdf is unprojected.
+        ValueError: If the gdf or route is unprojected.
         ValueError: If the boundary polygon does not contain most of the points in the gdf.
 
     Returns:
@@ -35,15 +36,13 @@ def get_candidate_idxs(gdf: gpd.GeoDataFrame, boundary: Polygon, route: pd.DataF
     if not gdf.crs.is_projected:
         raise ValueError("gdf must be in a projected coordinate reference system")
 
+    # check if route is projected
+    if not route.crs.is_projected:
+        raise ValueError("Route must be in a projected coordinate reference system")
+
     # check if boundary contains most of gdf points
     if gdf.sindex.query(boundary, predicate="intersects", output_format="dense").sum() < len(gdf) * 0.9:
         raise ValueError("May gdf points not contained within the boundary. Did you forget to project it?")
-
-    # convert route df to gdf and project
-    route = gpd.GeoDataFrame(
-        route, geometry=gpd.points_from_xy(route["position_long"], route["position_lat"]), crs="EPSG:4326"
-    )
-    route = ox.projection.project_gdf(route)
 
     # create mask of all route points within boundary
     within_bounds = route.sindex.query(boundary, predicate="intersects", output_format="dense")
@@ -78,4 +77,38 @@ def get_candidate_idxs(gdf: gpd.GeoDataFrame, boundary: Polygon, route: pd.DataF
         idx_list.append(found_idxs)
 
     # concatenate indices found in each iteration and return as dataframe
-    return pd.DataFrame(np.transpose(np.concatenate(idx_list, axis=1)), columns=["route", "candidate"])
+    return pd.DataFrame(np.transpose(np.concatenate(idx_list, axis=1)), columns=["route", "candidate"]).sort_values(
+        "route", ignore_index=True
+    )
+
+
+def get_candidate_df(gdf: gpd.GeoDataFrame, route: gpd.GeoDataFrame, candidate_idxs: pd.DataFrame) -> gpd.GeoDataFrame:
+    """Get dataframe containing all candidate data for each route point and all associated information.
+
+    Args:
+        gdf (gpd.GeoDataFrame): The gdf of the area of interest.
+        route (gpd.GeoDataFrame): The route gdf.
+        candidate_idxs (pd.DataFrame): A dataframe containing the route and candidate indices.
+
+    Returns:
+        gpd.GeoDataFrame: A GeoDataFrame containing all candidate data for each route point.
+    """
+    # reshape route dataframe to match candidate shape and rename columns in prepration for merge
+    route = (
+        route.iloc[candidate_idxs.route]
+        .reset_index(drop=True)
+        .rename(columns={"y": "y_obs", "x": "x_obs", "geometry": "geometry_obs"})
+    )
+
+    # reshape gdf to match candidate shape
+    gdf = gdf.iloc[candidate_idxs.candidate].reset_index(drop=True)
+
+    # merge route and gdf dataframes
+    df = pd.concat([route, gdf], axis=1)
+
+    # compute distance between observation and candidate
+    df["dist"] = df.geometry_obs.distance(df.geometry)
+
+    # retain route indices
+    df["idx"] = candidate_idxs.route
+    return df
