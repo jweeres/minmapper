@@ -6,7 +6,7 @@ import networkx as nx
 import numpy as np
 import osmnx as ox
 import pandas as pd
-from shapely import LineString, Polygon
+from shapely import LineString, MultiPolygon, Polygon, convex_hull
 from sklearn.neighbors import BallTree
 
 
@@ -71,24 +71,17 @@ def to_digraph(G: nx.MultiDiGraph, priority: nx.MultiDiGraph = None) -> nx.DiGra
     return nx.DiGraph(G)
 
 
-def add_visited_counts(G: nx.DiGraph, route_file: str) -> nx.DiGraph:
-    get_balltree(G)
-    graph_to_gdf(nx.MultiDiGraph(G))
-
-    # for route in get_routes_in_area(gdf, route_file):
-
-
-def graph_to_gdf(G: nx.MultiDiGraph) -> gpd.GeoDataFrame:
+def graph_to_gdf(G: nx.DiGraph) -> gpd.GeoDataFrame:
     """Convert a graph to a gdf containing both nodes and edges.
 
     Args:
-        G (nx.MultiDiGraph): The input graph.
+        G (nx.DiGraph): The input graph.
 
     Returns:
         gpd.GeoDataFrame: A GeoDataFrame containing all nodes and edges in the graph.
     """
     # convert graph to gdf
-    nodes, edges = ox.convert.graph_to_gdfs(G)
+    nodes, edges = ox.convert.graph_to_gdfs(nx.MultiDiGraph(G))
 
     # add radian columns for nodes
     nodes["y_rad"] = np.deg2rad(nodes["y"])
@@ -103,17 +96,36 @@ def graph_to_gdf(G: nx.MultiDiGraph) -> gpd.GeoDataFrame:
     return gdf[["osmid", "u", "v", "y", "x", "y_rad", "x_rad", "geometry", "geometry_edge", "name", "length"]]
 
 
-def buffer_gdf(gdf: gpd.GeoDataFrame, dist: float) -> gpd.GeoDataFrame:
-    gdf_proj = ox.projection.project_gdf(gdf)
-    gdf_proj_buff = gdf_proj.buffer(dist)
-    gdf_buff = ox.projection.project_gdf(gdf_proj_buff, to_latlong=True)
-    return gdf_buff
+def subgraph_from_gdf_mask(G: nx.DiGraph, gdf: gpd.GeoDataFrame, mask: gpd.GeoSeries, buffer: float) -> nx.DiGraph:
+    """Get the subgraph of the given graph found by only including nodes within some buffered distance of the mask.
 
+    Args:
+        G (nx.DiGraph): The input graph.
+        gdf (gpd.GeoDataFrame): The GeoDataFrame containing the graph nodes. Expects output from `graph.graph_to_gdf`.
+        mask (gpd.GeoSeries): The GeoSeries containing the mask geometries.
+        buffer (float): The buffer distance to apply to the mask.
 
-def get_balltree(G: nx.DiGraph) -> BallTree:
-    pass
-    # ball = BallTree(nodes[["y_rad", "x_rad"]].to_numpy(), metric="haversine")
+    Returns:
+        nx.DiGraph: The subgraph containing only the nodes within the buffered mask.
+    """
+    # buffer mask points and take the union
+    mask = mask.buffer(buffer).union_all()
 
+    # if union has multiple unconnected polygons, take convex hull
+    if isinstance(mask, MultiPolygon):
+        mask = convex_hull(mask)
 
-def create_trellis(candidates):
-    pass
+    # get indices of gdf that intersect mask
+    idxs = gdf.sindex.query(mask, predicate="intersects", output_format="dense")
+
+    # use idxs to get list of nodes to keep
+    to_keep = gdf.loc[idxs, ["u", "v"]]
+    to_keep = np.unique(to_keep.values, sorted=False)
+
+    # remove all nodes not in keep list
+    to_remove = [node for node in G.nodes if node not in to_keep]
+
+    # remove from graph and return
+    G_sub = G.copy()
+    G_sub.remove_nodes_from(to_remove)
+    return G_sub
