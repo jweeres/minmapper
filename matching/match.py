@@ -12,11 +12,11 @@ class Matcher:
     SIGMA_Z = 4.07
     BETA = 3
 
-    def __init__(self, matched_routes: dict[int, dict[str, str]] = None, beta: float = None, sigma: float = None):
+    def __init__(self, matched_routes: dict[int, dict[int, int]] = None, beta: float = None, sigma: float = None):
         """Initialize a matcher object.
 
         Args:
-            matched_routes (dict[int, dict[str, str]], optional): A dictionary of previously computed matched routes. Defaults to None.
+            matched_routes (dict[int, dict[int, int]], optional): A dictionary of previously computed matched routes. Defaults to None.
             beta (float, optional): Satandard deviation of Gaussian GPS noise. Defaults to None.
             sigma (float, optional): Robust estimator of difference between route distance and great circle distances. Defaults to None.
         """
@@ -79,9 +79,7 @@ class Matcher:
 
         return G
 
-    def viterbi_search(
-        self, G: nx.DiGraph, trellis: nx.DiGraph, start="start", target="target", route_id: int = None
-    ) -> dict[str, str]:
+    def viterbi_search(self, G: nx.DiGraph, trellis: nx.DiGraph, start="start", target="target") -> dict[str, str]:
         """Compute Viterbi search on the trellis graph to find most probable path.
 
         Args:
@@ -89,15 +87,10 @@ class Matcher:
             trellis (nx.DiGraph): Trellis graph of candidate points.
             start (str, optional): Name of the start node. Defaults to "start".
             target (str, optional): Name of the target node. Defaults to "target".
-            route_id (int, optional): ID of the route being matched. If provided, the matched route will be stored for future use. Defaults to None.
 
         Returns:
             dict[str, str]: Mapping of each node to its predecessor in the most probable path.
         """
-        # if we have already matched this route, return the stored result
-        if route_id is not None and route_id in self.matched_routes:
-            return self.matched_routes[route_id]
-
         # initialize joint probabilities and predecessors
         joint_prob = defaultdict(lambda: -float("inf"))
         predecessor = {}
@@ -168,11 +161,51 @@ class Matcher:
         # keep only predecessors that lead to target
         preds = self.get_predecessor_chain(target, predecessor)
 
-        # save route if route_id given
-        if route_id is not None:
-            self.matched_routes[route_id] = preds
-
         return preds
+
+    def get_path_edges(
+        self, G: nx.DiGraph, trellis: nx.DiGraph, predecessor: dict[str, str], route_id: int = None
+    ) -> list[tuple[int, int]]:
+        """Create a list of edges in the street network graph that best match the actual GPS data.
+
+        Args:
+            G (nx.DiGraph): The street network graph.
+            trellis (nx.DiGraph): The trellis graph.
+            predecessor (dict[str, str]): Mapping of each node to its predecessor in the most probable path. Expects the output of `viterbi_search`.
+            route_id (int, optional): The ID of the route being matched. Defaults to None.
+
+        Returns:
+            list[tuple[int, int]]: A list of edges that best match the actual GPS data.
+        """
+        # get list of nodes in trellis predecessor path
+        u_name = list(reversed(predecessor.values()))
+
+        # convert node list to edge list
+        path = [(u_name, v_name) for u_name, v_name in zip(u_name, u_name[1:])]
+
+        paths = []
+        for u_name, v_name in path:
+            # ignore edges involving gap nodes
+            if u_name.startswith("gap") or v_name.startswith("gap"):
+                continue
+
+            u = trellis.nodes[u_name]["candidate"]
+            v = trellis.nodes[v_name]["candidate"]
+
+            # find shortest path between u and v in G
+            paths.append(nx.shortest_path(G, u.node_id, v.node_id, weight="length"))
+
+        # drop all single-node paths
+        paths = [path for path in paths if len(path) > 1]
+
+        # convert path list to edge list
+        edges = [(u, v) for path in paths for u, v in zip(path, path[1:])]
+
+        if route_id is not None:
+            # store matched route edges
+            self.matched_routes[route_id] = edges
+
+        return edges
 
     @staticmethod
     def get_predecessor_chain(target: str, predecessor: dict[str, str]) -> dict[str, str]:
