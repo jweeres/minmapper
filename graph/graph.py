@@ -10,7 +10,7 @@ from shapely import LineString, MultiPolygon, Polygon, convex_hull
 from sklearn.neighbors import BallTree
 
 
-def get_routes_in_area(gdf: gpd.GeoDataFrame, route_file: str) -> Iterator[gpd.GeoDataFrame]:
+def get_routes_in_area(gdf: gpd.GeoDataFrame, route_file: str) -> Iterator[tuple[int, gpd.GeoDataFrame]]:
     """Get an iterator of all routes that are at least partially within the area of interest.
 
     Args:
@@ -18,18 +18,18 @@ def get_routes_in_area(gdf: gpd.GeoDataFrame, route_file: str) -> Iterator[gpd.G
         route_file (str): The filenmae of the route pickle file.
 
     Yields:
-        Iterator[gpd.GeoDataFrame]: An iterator that yields valid routes.
+        Iterator[tuple[int, gpd.GeoDataFrame]]: An iterator that yields route ids and valid routes.
     """
     with open(route_file, "rb") as file:
-        routes: list[gpd.GeoDataFrame] = pickle.load(file)
+        routes: dict[int, gpd.GeoDataFrame] = pickle.load(file)
 
-    for route in routes:
+    for route_id, route in routes.items():
         # project route to gdf crs
         route = ox.projection.project_gdf(route, to_crs=gdf.crs)
 
         # yield routes that intersect the area of interest
         if gdf.sindex.query(route.geometry, predicate="intersects", output_format="dense").any():
-            yield route
+            yield route_id, route
 
 
 def to_digraph(G: nx.MultiDiGraph, priority: nx.MultiDiGraph = None) -> nx.DiGraph:

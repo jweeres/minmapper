@@ -26,8 +26,8 @@ def create_routes(instance_name: str, logger: str = None):
     # limit to only runs and walks
     activities_df = activities_df[activities_df["Activity Type"].isin(["Run", "Walk"])]
 
-    routes = []
-    for _, row in activities_df.iterrows():
+    routes = {}
+    for route_id, row in activities_df.iterrows():
         filename = f"strava_data_{instance_name.split('-')[0]}/" + row["Filename"]
 
         # trim any compressed file extensions
@@ -59,7 +59,7 @@ def create_routes(instance_name: str, logger: str = None):
 
         # create geodataframe and append to route list
         df = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df["x"], df["y"]), crs="EPSG:4326")
-        routes.append(df)
+        routes[route_id] = df
 
     # save routes to file
     with open(f"routes_{instance_name}.pkl", "wb") as file:

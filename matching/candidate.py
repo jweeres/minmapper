@@ -42,7 +42,7 @@ def get_candidate_idxs(
 
     # check if boundary contains most of gdf points
     if gdf.sindex.query(boundary, predicate="intersects", output_format="dense").sum() < len(gdf) * 0.9:
-        raise ValueError("May gdf points not contained within the boundary. Did you forget to project it?")
+        raise ValueError("Many gdf points not contained within the boundary. Did you forget to project it?")
 
     # create mask of all route points within boundary
     within_bounds = route.sindex.query(boundary, predicate="intersects", output_format="dense")

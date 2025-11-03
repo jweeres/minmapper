@@ -21,8 +21,8 @@ def download_cs_graph(place: str, logger: str = None) -> tuple[nx.MultiDiGraph, 
     logger = logging.getLogger(logger)
     logger.info(f"Downloading graph for {place}...")
 
-    # can go either way on walking and biking paths
-    ox.settings.bidirectional_network_types = ["walk", "bike"]
+    # can go either way on all path types (we're not a car!)
+    ox.settings.bidirectional_network_types = ["all"]
 
     G = nx.MultiDiGraph()
     gdf = gpd.GeoDataFrame()
@@ -146,8 +146,8 @@ def download_walk_graph(gdf: gpd.GeoDataFrame, logger: str = None) -> tuple[nx.M
     logger = logging.getLogger(logger)
     logger.info(f"Downloading walking graph for {gdf.name.iloc[0]}...")
 
-    # can go either way on walking and biking paths
-    ox.settings.bidirectional_network_types = ["walk", "bike"]
+    # can go either way on all path types (we're not a car!)
+    ox.settings.bidirectional_network_types = ["all"]
 
     # get the list of polygons from the gdf
     try:
