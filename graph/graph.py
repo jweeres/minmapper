@@ -1,4 +1,6 @@
+import math
 import pickle
+from collections import Counter
 from collections.abc import Iterator
 
 import geopandas as gpd
@@ -129,3 +131,18 @@ def subgraph_from_gdf_mask(G: nx.DiGraph, gdf: gpd.GeoDataFrame, mask: gpd.GeoSe
     G_sub = G.copy()
     G_sub.remove_nodes_from(to_remove)
     return G_sub
+
+
+def add_visited_counts(G: nx.DiGraph, route_edges: dict[int, list[tuple[int, int]]]):
+    """Add `visited` attribute to all edges in the graph equal to the number of times each edge was traversed across all routes.
+
+    Args:
+        G (nx.DiGraph): The input graph.
+        route_edges (dict[int, list[tuple[int, int]]]): A dictionary mapping route IDs to lists of edges.
+    """
+    # count number of times each edge was visited across all routes
+    visited_counts = Counter([edge for edges in route_edges.values() for edge in edges])
+
+    # set visited counts for each edge in the graph
+    nx.set_edge_attributes(G, 0, "visited")
+    nx.set_edge_attributes(G, {edge: math.log10(count) for edge, count in visited_counts.items()}, "visited")

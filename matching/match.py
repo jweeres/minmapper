@@ -12,11 +12,13 @@ class Matcher:
     SIGMA_Z = 4.07
     BETA = 3
 
-    def __init__(self, matched_routes: dict[int, dict[int, int]] = None, beta: float = None, sigma: float = None):
+    def __init__(
+        self, matched_routes: dict[int, list[tuple[int, int]]] = None, beta: float = None, sigma: float = None
+    ):
         """Initialize a matcher object.
 
         Args:
-            matched_routes (dict[int, dict[int, int]], optional): A dictionary of previously computed matched routes. Defaults to None.
+            matched_routes (dict[int, list[tuple[int, int]]], optional): A dictionary of previously computed matched routes. Defaults to None.
             beta (float, optional): Satandard deviation of Gaussian GPS noise. Defaults to None.
             sigma (float, optional): Robust estimator of difference between route distance and great circle distances. Defaults to None.
         """
