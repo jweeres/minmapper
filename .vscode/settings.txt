@@ -1,0 +1,97 @@
+{
+    "terminal.integrated.commandsToSkipShell": [
+        "language-julia.interrupt"
+    ],
+    "terminal.integrated.env.windows": {
+    "PYTHONPATH": "${workspaceFolder}"
+    },
+    "julia.symbolCacheDownload": true,
+    "[python]": {
+        "editor.formatOnType": true,
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "charliermarsh.ruff",
+        "editor.codeActionsOnSave": {
+          "source.fixAll": "explicit",
+          "source.organizeImports": "explicit",
+        },
+        "editor.rulers": [120]
+      },
+    "python.condaPath": "C:\\ProgramData\\miniconda3\\Scripts\\conda-script.py",
+    "terminal.integrated.defaultProfile.windows": "Command Prompt",
+    "ampl.pathToExecutable": "C:\\Users\\Anthony Rachiero\\AMPL\\ampl.exe",
+    "launch": {
+        "configurations": [{ 
+            "name": "Python: Debug Tests",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "purpose": ["debug-test"],
+            "console": "integratedTerminal",
+            "justMyCode": false
+          }],
+        "compounds": []
+    },
+    "julia.enableTelemetry": false,
+    "errorLens.decorations": {
+        "errorRange": {},
+        "warningRange": {},
+        "infoRange": {},
+        "hintRange": {},
+        "errorMessage": {},
+        "warningMessage": {},
+        "infoMessage": {},
+        "hintMessage": {}
+    },
+    "errorLens.editorHoverPartsEnabled": {
+        "messageEnabled": true
+    },
+    "errorLens.statusBarMessageEnabled": true,
+    "errorLens.gutterIconsEnabled": true,
+    "errorLens.gutterIconSet": "square",
+    "pythonIndent.useTabOnHangingIndent": true,
+    "rainbow_csv.highlight_rows": true,
+    "rainbow_csv.virtual_alignment_mode": "always",
+    "rainbow_csv.virtual_alignment_char": "space",
+    "rainbow_csv.virtual_alignment_vertical_grid": true,
+    "ruff.lint.ignore": [
+        "F401"
+    ],
+    "errorLens.messageEnabled": false,
+    "jupyter.notebookFileRoot": "${workspaceFolder}",
+    "ruff.configuration": "",
+    "notebook.formatOnCellExecution": true,
+    "notebook.formatOnSave.enabled": true,
+    "jupyter.debugJustMyCode": false,
+    "debugpy.debugJustMyCode": false,
+    "[csv]": {
+        "editor.inlayHints.maximumLength": 0
+    },
+    "python.defaultInterpreterPath": "C:\\Users\\Anthony Rachiero\\.conda\\envs\\mie1603hw3",
+
+    "yaml.customTags": [
+
+        "!!python/tuple",
+        "!!map",
+    ],
+    "yaml.validate": true,  // or false if you want to disable it entirely
+    "yaml.schemas": {},
+
+    "files.associations": {
+    "*.html": "jinja-html"
+    },
+    "github.copilot.nextEditSuggestions.enabled": true,
+    "[dockercompose]": {
+        "editor.insertSpaces": true,
+        "editor.tabSize": 2,
+        "editor.autoIndent": "advanced",
+        "editor.defaultFormatter": "redhat.vscode-yaml"
+    },
+    "[github-actions-workflow]": {
+        "editor.defaultFormatter": "redhat.vscode-yaml"
+    },
+    "ruff.lineLength": 120,
+    "[dynamic csv]": {
+        "editor.inlayHints.maximumLength": 0
+    },
+
+}

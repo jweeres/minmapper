@@ -23,6 +23,14 @@ def download_cs_graph(place: str, logger: str = None) -> tuple[nx.MultiDiGraph, 
 
     # can go either way on all path types (we're not a car!)
     ox.settings.bidirectional_network_types = ["all"]
+    ox.settings.useful_tags_way = ox.settings.useful_tags_way + [
+        "footway",
+        "sidewalk",
+        "street",
+        "foot",
+        "disused",
+        "crossing",
+    ]
 
     G = nx.MultiDiGraph()
     gdf = gpd.GeoDataFrame()
