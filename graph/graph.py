@@ -8,8 +8,7 @@ import networkx as nx
 import numpy as np
 import osmnx as ox
 import pandas as pd
-from shapely import LineString, MultiPolygon, Polygon, convex_hull
-from sklearn.neighbors import BallTree
+from shapely import MultiPolygon, convex_hull
 
 
 def get_routes_in_area(gdf: gpd.GeoDataFrame, route_file: str) -> Iterator[tuple[int, gpd.GeoDataFrame]]:
@@ -146,3 +145,19 @@ def add_visited_counts(G: nx.DiGraph, route_edges: dict[int, list[tuple[int, int
     # set visited counts for each edge in the graph
     nx.set_edge_attributes(G, 0, "visited")
     nx.set_edge_attributes(G, {edge: math.log10(count) for edge, count in visited_counts.items()}, "visited")
+
+
+def graph_difference(G: nx.DiGraph, H: nx.DiGraph) -> nx.DiGraph:
+    G_diff = G.copy()
+    G_diff.remove_edges_from(edge for edge in G.edges if H.has_edge(*edge))
+    G_diff.remove_nodes_from(list(nx.isolates(G_diff)))
+    return G_diff
+
+
+def walk_network(G: nx.DiGraph) -> nx.DiGraph:
+    G_walk = G.copy()
+    G_walk.remove_edges_from(
+        (u, v)
+        for u, v, highway in G.edges.data("highway")
+        if highway not in ["footway", "bridleway", "steps", "corridor", "path"]
+    )
